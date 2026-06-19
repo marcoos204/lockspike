@@ -2,3 +2,6 @@
 	path = pyspike
 	url = https://github.com/marcoos204/pyspike.git
 	branch = punxa-cosim-env
+[submodule "punxa"]
+	path = punxa
+	url = https://github.com/marcoos204/punxa.git
