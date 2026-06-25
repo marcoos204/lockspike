@@ -96,10 +96,6 @@ def checkpoint_spike(hart, mem_regions, filename='spike.ckpt', sim=None):
 
     ser = Serializer(filename)
 
-    #Header won't be needed for this refactored v2
-    #main difference rn btween punxa & Spike: the priv mode
-    #ser.write_string("spike_checkpoint_v2")
-
     # PC
     ser.write_i64(hart.state.pc)
 
@@ -238,7 +234,7 @@ def restore_spike(hart, filename='spike.ckpt', sim=None):
                 hart.put_csr(i, v)
             except Exception:
                 pass
-# fake stack
+    # fake stack for punxa's format equivalence
     _ = ser.read_int_tuple_list(5)
     # Memory regions
     num_regions = ser.read_i64()
@@ -250,7 +246,7 @@ def restore_spike(hart, filename='spike.ckpt', sim=None):
         data = zlib.decompress(zdata)
         _write_mem_region(hart, base + 0x80000000, data)
 
-# fake uart
+    # fake uart for punxa's format equivalence
     _ = ser.read_string_list()
     # CLINT
     mtime    = ser.read_i64()
@@ -267,7 +263,7 @@ def restore_spike(hart, filename='spike.ckpt', sim=None):
             hart.mmu.store_uint64(CLINT_MTIMECMP_ADDR, mtimecmp)
         except Exception:
             pass
-    #fake tracer
+    #fake tracer for punxa's format equivalence
     _ = ser.read_dictionary()
     #restore correct prv mode
     hart.set_privilege(actual_prv, False)

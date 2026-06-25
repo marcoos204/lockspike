@@ -4,15 +4,12 @@ from riscv.cfg import cfg_t, mem_cfg_t
 from riscv.debug_module import debug_module_config_t
 import time
 
-OPENSBI_ELF    = "/home/marcos/Desktop/Uni/TDR/opensbi/build/platform/generic/firmware/fw_jump.elf"
-DTB_FILE       = "/home/marcos/Desktop/Uni/TDR/pyspike_initramfs.dtb"
-KERNEL_BIN     = "/home/marcos/Desktop/Uni/TDR/buildroot/output/images/Image"
-INITRAMFS      = "/home/marcos/Desktop/Uni/TDR/buildroot/output/images/rootfs.cpio"
+OPENSBI_BIN    = "../payloads/fw_payload.bin"
+DTB_FILE       = "../payloads/pyspike_initramfs_noplic.dtb"
+PAYLOAD_ADDR   = 0x8000_0000 #  opensbi boot addr
 
 TRAMPOLINE     = 0x8070_0000  # ROM simulation: sets a0/a1, jumps to OpenSBI
-DTB_RAM        = 0x8200_0000  # DTB location in RAM
-KERNEL_ADDR    = 0x8020_0000  # fw_jump hands off here
-INITRAMFS_ADDR = 0x8400_0000  # must match linux,initrd-start in DTB
+DTB_ADDR       = 0x8200_0000  # DTB location in RAM
 
 ISA = "rv64imafdc_zicsr_zifencei_zicntr"
 
@@ -43,48 +40,25 @@ def print_reg_state(state, label=""):
     print(f"  sstatus: {hex(state['sstatus'])}")
     print(f"  satp:    {hex(state['satp'])}")
 
-def compare_regs(spike_state, punxa_state):
-    """Compare Spike vs Punxa register states. Returns list of (reg, spike_val, punxa_val)."""
-    mismatches = []
-    for reg, spike_val in spike_state.items():
-        punxa_val = punxa_state.get(reg)
-        if punxa_val is None:
-            continue
-        if spike_val != punxa_val:
-            mismatches.append((reg, spike_val, punxa_val))
-    return mismatches
-
 def write_u32(hart, addr, val):
     for i in range(4):
         hart.mmu.store_uint8(addr + i, (val >> (8*i)) & 0xFF)
 
-def load_elf(hart, elf_path):
-    with open(elf_path, "rb") as f:
-        elf = ELFFile(f)
-        for seg in elf.iter_segments():
-            if seg.header.p_type != "PT_LOAD":
-                continue
-            vaddr, data = seg.header.p_vaddr, seg.data()
-            print(f"  PT_LOAD: {hex(vaddr)} ({hex(seg.header.p_filesz)} bytes)")
-            for i, byte in enumerate(data):
-                hart.mmu.store_uint8(vaddr + i, byte)
-            for i in range(seg.header.p_filesz, seg.header.p_memsz):
-                hart.mmu.store_uint8(vaddr + i, 0)
-
-def load_binary(hart, path, addr):
+def load_binary_spike(hart, path, addr):
     with open(path, "rb") as f:
         data = f.read()
-    print(f"  Binary: {hex(addr)} ({hex(len(data))} bytes)")
-    for i, b in enumerate(data):
-        hart.mmu.store_uint8(addr + i, b)
-    return len(data)
 
-def load_dtb(hart, dtb_path):
-    with open(dtb_path, "rb") as f:
-        data = f.read()
-    for i, b in enumerate(data):
-        hart.mmu.store_uint8(DTB_RAM + i, b)
-    print(f"[*] DTB loaded at {hex(DTB_RAM)} ({len(data)} bytes)")
+    print(f'  Loading payload at: {addr:#x} ({len(data):#x} bytes)')
+    for i in range (0, len(data) - 7, 8):
+        chunk = data[i:i+8]
+        val64 = int.from_bytes(chunk, byteorder='little')
+        hart.mmu.store_uint64(addr + i, val64)
+    
+    if ((len(data) % 8) != 0):
+        for i in range (len(data) - (len(data) % 8), len(data)):
+            hart.mmu.store_uint8(addr + i, data[i])
+   
+    return len(data)
 
 def write_trampoline(hart):
     insns = [
@@ -97,7 +71,7 @@ def write_trampoline(hart):
     ]
     for i, insn in enumerate(insns):
         write_u32(hart, TRAMPOLINE + i*4, insn)
-    print(f"[*] Trampoline at {hex(TRAMPOLINE)}: a0=0, a1={hex(DTB_RAM)} -> 0x80000000")
+    print(f"[*] Trampoline at {hex(TRAMPOLINE)}: a0=0, a1={hex(DTB_ADDR)} -> 0x80000000")
 
 def main():
     cfg = cfg_t(
@@ -117,20 +91,12 @@ def main():
     hart0 = spike.get_core(0)
 
     print(f"[*] ISA: {cfg.isa}")
-    print(f"[*] Memory: 256MB @ 0x80000000")
-    print("[*] Loading OpenSBI...")
     print(dir(hart0))
-    load_elf(hart0, OPENSBI_ELF)
-
-    print("[*] Loading kernel...")
-    load_binary(hart0, KERNEL_BIN, KERNEL_ADDR)
-
-    print("[*] Loading initramfs...")
-    initramfs_size = load_binary(hart0, INITRAMFS, INITRAMFS_ADDR)
-    print(f"    initrd-end = {hex(INITRAMFS_ADDR + initramfs_size)}")
+    load_binary_spike(hart0, OPENSBI_BIN, PAYLOAD_ADDR)
 
     print("[*] Loading DTB...")
-    load_dtb(hart0, DTB_FILE)
+    load_binary_spike(hart0, DTB_FILE, DTB_ADDR)
+
 
     write_trampoline(hart0)
 
@@ -144,25 +110,6 @@ def main():
         if (hart0.state.pc == 0x0000000080200000):
             now = time.time() - start
             print("Took ", step, " steps to get here! Time elapsed: ", now, " seconds")
-        
-        #if step % 100000000== 0:
-        #    print_reg_state(get_reg_state(hart0), label=f"step={step}")
-
-
-        # ── Co-simulation comparison point ────────────────────────────────
-        # After each step, get Spike's state and compare with Punxa.
-        # Uncomment and plug in punxa.step() + punxa.get_reg_state() when ready.
-        #
-        # spike_state = get_reg_state(hart0)
-        # punxa.step()
-        # punxa_state = punxa.get_reg_state()
-        # mismatches = compare_regs(spike_state, punxa_state)
-        # if mismatches:
-        #     print(f"[!] MISMATCH at step {step}:")
-        #     for reg, sv, pv in mismatches:
-        #         print(f"    {reg}: spike={hex(sv)} punxa={hex(pv)}")
-        #     print_reg_state(spike_state, label=f"spike step={step}")
-        #     break
 
 if __name__ == "__main__":
     main()

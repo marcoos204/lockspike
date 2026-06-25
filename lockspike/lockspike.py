@@ -17,10 +17,10 @@ from riscv.cfg import cfg_t, mem_cfg_t
 from riscv.debug_module import debug_module_config_t
 from collections import deque
 
-PATH = '/home/marcos/Desktop/Uni/TDR'
+PATH = './'
 
-FW_PAYLOAD_BIN = os.path.join(PATH, 'opensbi/build/platform/generic/firmware/fw_payload.bin')
-DTB_FILE       = os.path.join(PATH, 'pyspike_initramfs_noplic.dtb')
+FW_PAYLOAD_BIN = os.path.join(PATH, '../payloads/fw_payload.bin')
+DTB_FILE       = os.path.join(PATH, '../payloads/pyspike_initramfs_noplic.dtb')
 
 MEM_BASE       = 0x8000_0000
 MEM_SIZE       = 0x1000_0000
@@ -46,14 +46,6 @@ ring_buff = None
 #should refactor later
 def write_u32(hart, addr, val):
     hart.mmu.store_uint32(addr, val) 
-
-#def load_binary_spike(hart, path, addr):
-#    with open(path, "rb") as f:
-#        data = f.read()
-#    print(f'  Binary: {addr:#x} ({len(data):#x} bytes)')
-#    for i, b in enumerate(data):
-#        hart.mmu.store_uint8(addr + i, b)
-#    return len(data)
 
 def load_binary_spike(hart, path, addr):
     with open(path, "rb") as f:
@@ -96,7 +88,7 @@ def read_insn_at_pc(hart, cpu, pc):
     back to Punxa's behavioural memory for physical addresses when
     Spike's MMU rejects the access. Returns None if neither works.
     """
-    # Try Spike's MMU first: yet it could fail depending on the MMU state.
+    # Try Spike's MMU first, but it could fail depending on the MMU state.
     # This works but it would probably be better to just create or call a VA_translate
     # function from spike to avoid doing the load.
     try:
@@ -294,12 +286,7 @@ def run_until(target_pc, max_steps=100_000_000):
 
 def checkpoint_cosim(filename_prefix='cosim'):
     """
-    Save the state of both Punxa and Spike to checkpoint files.
-
-    Creates three files:
-      - {filename_prefix}.punxa.dat   : Punxa state (CPU + memory + UART + CLINT)
-      - {filename_prefix}.spike.ckpt  : Spike state (CPU + memory + CLINT)
-      - {filename_prefix}.cosim.meta  : cosim metadata (step_count)
+    Save the state of the lockstep sim to checkpoint files.
 
     Use after prepare_cosim() and some cosim_run() steps. Typical usage:
         prepare_cosim()
@@ -342,7 +329,7 @@ def restore_cosim(filename_prefix='cosim'):
     both simulators with the base configuration. This function then
     overwrites their state with the checkpointed values.
 
-    Typical usage:
+    Usage:
         prepare_cosim()
         restore_cosim('kernel_entry')
         cosim_run(...)
@@ -386,11 +373,6 @@ class PrintRingBuffer:
         self.buffer.clear()
 def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enforce=False):
     """Step both Spike and Punxa, compare after each instruction.
-
-    Uses read_insn_at_pc to fetch the instruction at the diverging PC
-    via Spike's MMU, which handles virtual addresses automatically once
-    paging is enabled. This keeps mret/sret detection and timer CSR
-    auto-sync working through kernel boot into user mode.
     """
     global step_count
     global ilast
@@ -408,7 +390,7 @@ def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enfor
         0xB00, 0xB02,
     }
 
-    MTIP_BIT = 1 << 7 # Cambiado de STIP_BIT (bit 5) a MTIP_BIT (bit 7)
+    MTIP_BIT = 1 << 7 
 
     for i in range(n):
         #infinite timer in cosim fix - we need to update clint's mtime in punxa, not just the read effect
@@ -432,19 +414,14 @@ def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enfor
         spike.step(1)
         step_count += 1
         
-        # Sync STIP from Punxa to Spike before stepping Spike.
-        # Spike's mtime advances only every INTERLEAVE instructions in
-        # sim_t::step, while Punxa's mtime advances per simulator clock.
-        # This causes Punxa to detect timer interrupts earlier than Spike.
-        # We mirror Punxa's STIP into Spike's mip so that both simulators
-        # see the same pending interrupt state when SIE is enabled.
+        # We sync STIP (the timer interrupts) if punxa took an interrupt but Spike didn't
         punxa_mip = punxa_cpu.csr[0x344]
         spike_mip = hart0.get_csr(0x344)
         punxa_mtip = punxa_mip & MTIP_BIT
         spike_mtip = spike_mip & MTIP_BIT
         if punxa_mtip and not spike_mtip:
             now = hart0.get_csr(0xC01)
-            spike.clint.set_mtimecmp(0, now) #esotheric legal way of forcing pending interrupts
+            spike.clint.set_mtimecmp(0, now) #forcing pending interrupts
             stip_syncs += 1
         elif spike_mtip and not punxa_mtip:
             now = hart0.get_csr(0xC01)
@@ -475,13 +452,13 @@ def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enfor
             spike.step(1)
             trap_syncs += 1
         
-        # Symmetric case: Punxa took an interrupt that Spike hasn't
+        # Punxa may take an interrupt that Spike hasn't
         # taken yet. This happens because Punxa evaluates pending
         # interrupts at the end of the instruction that enables them
         # (e.g., CSRRSI sstatus |= SIE), while Spike evaluates them at
         # the start of the next instruction. When Punxa jumps to stvec
         # in the same step that enables interrupts, Spike needs an
-        # extra step to catch up.
+        # extra step to catch up, just as the previous spike_trapped line
         
         punxa_pc_after = punxa_cpu.pc
         punxa_at_trap_vec = punxa_pc_after in (
@@ -530,8 +507,6 @@ def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enfor
             punxa_cpu.write_list.clear()
 
         if mismatches:
-            # [CHANGED] Timer CSR auto-sync also uses read_insn_at_pc with
-            # Punxa fallback for physical PCs.
             if spike_state['pc'] == punxa_state['pc']:
                 ins = read_insn_at_pc(hart0, punxa_cpu, spike_pc_before)
                 if ins is not None:
@@ -571,7 +546,7 @@ def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enfor
             if ((step_count % CHECKPOINT_STP) == 0):
                 checkpoint_cosim('lockstep_prev_10M')
 
-        icur = punxa_cpu.getCSR(0xC02) # 0xC02 es el CSR_INSTRET
+        icur = punxa_cpu.getCSR(0xC02) # 0xC02 is CSR_INSTRET
         if (icur % 10000 == 0) and (icur != ilast):
             print('ins: {:n}'.format(icur))
             ilast = icur
@@ -584,8 +559,6 @@ def cosim_step(punxa_cpu, punxa_hw, n=1, ignore_csrs=False, verbose=False, enfor
 def punxa_write_capture(pa, size, value, va):
     global punxa_cpu
     mask = (1 << (8 * size)) -  1 #mask higher bits depending on size for false positives
-    #str_va = f"{va:#x}" if va is not None else "None"
-    #print(f"[DEBUG HOOK] PA: {pa:#010x} | VA: {str_va} | Size: {size} | Val: {value:#x}")
     punxa_cpu.write_list.append((pa, va, size, value & mask))
 
 def prepare_cosim():
@@ -640,9 +613,7 @@ def prepare_cosim():
     cpu_module.pr = ring_buff
 
     punxa_cpu.setVerbose(False)
-    # Match Spike's Machine Information CSR values for cosim compatibility.
-    # These are identity metadata, not functional state; each simulator
-    # reports its own values and we override Punxa to match Spike.
+    # match Spike's machine info CSR values for cosim compatibility.
     punxa_cpu.csr[0xF11] = hart0.get_csr(0xF11)  # mvendorid
     punxa_cpu.csr[0xF12] = hart0.get_csr(0xF12)  # marchid
     punxa_cpu.csr[0xF13] = hart0.get_csr(0xF13)  # mimpid
