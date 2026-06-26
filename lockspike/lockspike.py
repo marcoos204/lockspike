@@ -17,10 +17,10 @@ from riscv.cfg import cfg_t, mem_cfg_t
 from riscv.debug_module import debug_module_config_t
 from collections import deque
 
-PATH = './'
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-FW_PAYLOAD_BIN = os.path.join(PATH, '../payloads/fw_payload.bin')
-DTB_FILE       = os.path.join(PATH, '../payloads/pyspike_initramfs_noplic.dtb')
+FW_PAYLOAD_BIN = os.path.normpath(os.path.join(SCRIPT_DIR, './payloads/fw_payload.bin'))
+DTB_FILE       = os.path.normpath(os.path.join(SCRIPT_DIR, './payloads/pyspike_initramfs_noplic.dtb'))
 
 MEM_BASE       = 0x8000_0000
 MEM_SIZE       = 0x1000_0000
@@ -298,9 +298,10 @@ def checkpoint_cosim(filename_prefix='cosim'):
         restore_cosim('kernel_entry')
         cosim_run(...)
     """
-    from checkpoint_spike import checkpoint_spike
+    
+    from .checkpoint.checkpoint_spike import checkpoint_spike
     from punxa.interactive_commands import checkpoint as punxa_checkpoint
-
+    
     ckpt_file = f'{filename_prefix}.punxa.dat'
     meta_file  = f'{filename_prefix}.cosim.meta'
 
@@ -335,8 +336,8 @@ def restore_cosim(filename_prefix='cosim'):
         cosim_run(...)
     """
     global step_count
-
-    from checkpoint_spike import restore_spike
+    
+    from .checkpoint.checkpoint_spike import restore_spike
     from punxa.interactive_commands import restore as punxa_restore
 
     ckpt_file = f'{filename_prefix}.punxa.dat'

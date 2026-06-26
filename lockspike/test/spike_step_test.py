@@ -2,7 +2,6 @@ from elftools.elf.elffile import ELFFile
 from riscv.sim import sim_t
 from riscv.cfg import cfg_t, mem_cfg_t
 from riscv.debug_module import debug_module_config_t
-import time
 
 OPENSBI_BIN    = "../payloads/fw_payload.bin"
 DTB_FILE       = "../payloads/pyspike_initramfs_noplic.dtb"
@@ -12,33 +11,6 @@ TRAMPOLINE     = 0x8070_0000  # ROM simulation: sets a0/a1, jumps to OpenSBI
 DTB_ADDR       = 0x8200_0000  # DTB location in RAM
 
 ISA = "rv64imafdc_zicsr_zifencei_zicntr"
-
-def get_reg_state(hart):
-    state = {}
-    state['pc'] = hart.state.pc
-    for i in range(32):
-        state[f'x{i}'] = hart.state.XPR[i]
-    state['mstatus'] = hart.get_csr(0x300)
-    state['mepc']    = hart.get_csr(0x341)
-    state['mcause']  = hart.get_csr(0x342)
-    state['sepc']    = hart.get_csr(0x141)
-    state['scause']  = hart.get_csr(0x142)
-    state['sstatus'] = hart.get_csr(0x100)
-    state['satp']    = hart.get_csr(0x180)
-    return state
-
-def print_reg_state(state, label=""):
-    print(f"--- Register state {label} ---")
-    print(f"  PC: {hex(state['pc'])}")
-    for i in range(32):
-        print(f"  x{i:02d}: {hex(state[f'x{i}'])}")
-    print(f"  mstatus: {hex(state['mstatus'])}")
-    print(f"  mepc:    {hex(state['mepc'])}")
-    print(f"  mcause:  {hex(state['mcause'])}")
-    print(f"  sepc:    {hex(state['sepc'])}")
-    print(f"  scause:  {hex(state['scause'])}")
-    print(f"  sstatus: {hex(state['sstatus'])}")
-    print(f"  satp:    {hex(state['satp'])}")
 
 def write_u32(hart, addr, val):
     for i in range(4):
@@ -86,12 +58,10 @@ def main():
         plugin_device_factories=[],
         args=["spike"],
         dm_config=debug_module_config_t(),
-        dtb_file=DTB_FILE,
     )
     hart0 = spike.get_core(0)
 
     print(f"[*] ISA: {cfg.isa}")
-    print(dir(hart0))
     load_binary_spike(hart0, OPENSBI_BIN, PAYLOAD_ADDR)
 
     print("[*] Loading DTB...")
@@ -102,14 +72,8 @@ def main():
 
     hart0.state.pc = TRAMPOLINE
     print(f"[*] Starting execution at {hex(TRAMPOLINE)}")
-    step = 0
-    start = time.time()
     while True:
-        spike.step(1)
-        step += 1
-        if (hart0.state.pc == 0x0000000080200000):
-            now = time.time() - start
-            print("Took ", step, " steps to get here! Time elapsed: ", now, " seconds")
+        spike.step(10000000)
 
 if __name__ == "__main__":
     main()
