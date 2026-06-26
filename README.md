@@ -1,15 +1,15 @@
 # Lockspike: Lock-step execution Python framework for Spike, the RISC-V ISS
 
 Lockspike is meant to be a simple but flexible Python framework for running Spike in lock-step with another simulator. Mainly, it's used to catch divergences between simulators, using Spike as the golden model.
-Lockspike allows you to instrument Spike with a modified PySpike framework: Instantiate a simulation object and load any binary into Spike, then control the flow of the simulation at will. Modify register values, check its values, modify CLINT state, create checkpoints of the state, inject interruptions from other sources, modify memory regions, etc.
+Lockspike allows you to instrument Spike with a modified PySpike framework: Instantiate a simulation object and load any binary into Spike, then control the flow of the simulation at will. Modify register values, check its values, modify CLINT state, create checkpoints of the state, inject interrupts from other sources, modify memory regions, etc.
 
-The lockspike.py file is an implementation of a framework for the 'Punxa' simulator. It's been used to verify it's implementation up to the usershell prompt. It's also able to provide a checkpoint functionality described at  lockspike/checkpoint/checkpoint.py, that enables Spike to store its entire simulation state (currently, in a format equivalent to Punxa's). Finally, it comes with a script that creates a single Spike simulation instance and loads a kernel payload into it, as a test for the functionality of the framework in lockstep/spike_step_test.py
+The lockspike.py file is an implementation of a framework for the ['Punxa'](https://github.com/marcoos204/punxa) simulator. It's been used to verify its implementation up to the user shell prompt. It's also able to provide a checkpoint functionality described at  lockspike/checkpoint/checkpoint.py, that enables Spike to store its entire simulation state (currently, in a format equivalent to Punxa's). Finally, it comes with a script that creates a single Spike simulation instance and loads a kernel payload into it, as a test for the functionality of the framework in lockstep/spike_step_test.py
 
-Users may modify lockspike.py and adapt the framework to work in Lock-step with their own DUT. Lockspike also may be used for other purposes, such as retrieving logs from the simulation state (mem regions, GPR, CSR...) in a desired format.
+Users may modify lockspike.py and adapt the framework to work in lock-step with their own DUT. Lockspike also may be used for other purposes, such as retrieving logs from the simulation state (mem regions, GPR, CSR...) in a desired format.
 
 ## How to build:
 
-Getting source Code:
+Getting the source Code:
 
 ```bash
 $ git clone --recurse-submodules https://github.com/marcoos204/lockspike
@@ -31,7 +31,7 @@ Then install all dependencies for both PySpike and Punxa
 
 ## Using the framework:
 
-The lockspike framework is a python script specifically tailored for the Punxa simulator, but users may modify it as they like in order to adapt it for their DUT.
+The lockspike framework is a Python script specifically tailored for the Punxa simulator, but users may modify it as they like in order to adapt it for their DUT.
 
 If you want to test the developed framework for Punxa, in order to see how it works and base off your work from that script:
 
@@ -87,7 +87,7 @@ And, if you want to test the checkpoint functionality:
 >>> quit()
 ```
 
-Then, from a new python REPL session:
+Then, from a new Python REPL session:
 
 ```python
 >>> import sys
@@ -105,9 +105,9 @@ Then, from a new python REPL session:
 [*] Cosim state restored at step 1000
 ```
 
-You can also modify Spike values at register, memory, or even the CLINT device registers (mtime, mtimecmp) with the functions provided by the lockspike.py script. You can check all the available functions callable form Python of Spike on pyspike/src/main/cpp/py_module.cc
+You can also modify Spike values at register, memory, or even the CLINT device registers (mtime, mtimecmp) with the functions provided by the lockspike.py script. You can check all the available functions callable from Python of Spike on pyspike/src/main/cpp/py_module.cc
 
-If you want to test the script that handles the singular Spike instantation via Python:
+If you want to test the script that handles the singular Spike instiantation via Python:
 
 ```bash
 $ (.venv) cd lockspike/test/
