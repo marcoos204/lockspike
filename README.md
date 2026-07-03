@@ -1,3 +1,12 @@
+```text
+██╗      ██████╗  ██████╗██╗  ██╗███████╗██████╗ ██╗██╗  ██╗███████╗
+██║     ██╔═══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗██║██║ ██╔╝██╔════╝
+██║     ██║   ██║██║     █████╔╝ ███████╗██████╔╝██║█████╔╝ █████╗  
+██║     ██║   ██║██║     ██╔═██╗ ╚════██║██╔═══╝ ██║██╔═██╗ ██╔══╝  
+███████╗╚██████╔╝╚██████╗██║  ██╗███████║██║     ██║██║  ██╗███████║
+╚══════╝ ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝
+
+
 # Lockspike: Lock-step execution Python framework for Spike, the RISC-V ISS
 
 Lockspike is meant to be a simple but flexible Python framework for running Spike in lock-step with another simulator. Mainly, it's used to catch divergences between simulators, using Spike as the golden model.
